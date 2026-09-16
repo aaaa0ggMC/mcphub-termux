@@ -36,6 +36,28 @@ fs.writeFileSync(configPath, JSON.stringify([
     enabled: true
   },
   {
+    id: 'kebiao',
+    name: 'Kebiao (adapter)',
+    command: process.execPath,
+    args: [fixture],
+    cwd: here,
+    env: { KEBIAO_TOKEN: 'test-kebiao-token' },
+    adapter: 'mcps/kebiao/index.ts',
+    transport: 'stdio',
+    enabled: true
+  },
+  {
+    id: 'ledger',
+    name: 'Ledger (adapter)',
+    command: process.execPath,
+    args: [fixture],
+    cwd: here,
+    env: {},
+    adapter: 'mcps/ledger/index.ts',
+    transport: 'stdio',
+    enabled: true
+  },
+  {
     id: 'memory',
     name: 'Memory (adapter)',
     command: process.execPath,
@@ -181,6 +203,57 @@ test('memory adapter enforces X-API-KEY when MCP_HUB_MEMORY_API_KEY is set', asy
 
   const accepted = await openSession('memory', { 'X-API-KEY': 'test-key' });
   assert.ok(accepted);
+});
+
+test('kebiao adapter refuses anonymous sessions and accepts the token header', async () => {
+  // 没有令牌：连 initialize 都不给过
+  const rejected = await post('kebiao', INIT);
+  assert.equal(rejected.status, 200);
+  const error = await rejected.json();
+  assert.equal(error.error.code, -32001);
+  assert.match(error.error.message, /X-Kebiao-Token/);
+
+  // 那次请求建立的会话同样不可用：令牌是会话建立时定下来的
+  const stillRejected = await post('kebiao', { jsonrpc: '2.0', id: 'list', method: 'tools/list' }, {
+    session: rejected.headers.get('Mcp-Session-Id')
+  });
+  assert.equal((await stillRejected.json()).error.code, -32001);
+
+  const wrong = await post('kebiao', INIT, { headers: { 'X-Kebiao-Token': 'nope' } });
+  assert.equal((await wrong.json()).error.code, -32001);
+
+  // 令牌正确才拿得到工具
+  const session = await openSession('kebiao', { 'X-Kebiao-Token': 'test-kebiao-token' });
+  const body = await callTool('kebiao', session, 'echo_arguments', { cookie: 'SESSDATA=x' });
+  assert.ok(body.result, '带着正确令牌应该能正常调用工具');
+
+  // Authorization: Bearer 是 kebiao 自己 HTTP 路径的用法，这里也认
+  const bearer = await openSession('kebiao', { Authorization: 'Bearer test-kebiao-token' });
+  assert.ok(bearer);
+});
+
+test('ledger adapter refuses anonymous sessions and accepts the key header', async () => {
+  const rejected = await post('ledger', INIT);
+  const error = await rejected.json();
+  assert.equal(error.error.code, -32001);
+  assert.match(error.error.message, /X-Ledger-Key/);
+
+  // 匿名不只是看不到账目，写工具也在同一层，所以整条会话都得关门
+  const denied = await post('ledger', { jsonrpc: '2.0', id: 'add', method: 'tools/call', params: { name: 'echo_arguments', arguments: {} } }, {
+    session: rejected.headers.get('Mcp-Session-Id')
+  });
+  assert.equal((await denied.json()).error.code, -32001);
+
+  const session = await openSession('ledger', { 'X-Ledger-Key': 'a'.repeat(64) });
+  const body = await callTool('ledger', session, 'echo_arguments', {});
+  assert.ok(body.result);
+
+  // 会话中途换一把密钥不会生效，会明确报错而不是按旧权限继续
+  const swapped = await post('ledger', { jsonrpc: '2.0', id: 'list', method: 'tools/list' }, {
+    session,
+    headers: { 'X-Ledger-Key': 'b'.repeat(64) }
+  });
+  assert.equal((await swapped.json()).error.code, -32001);
 });
 
 test('memory adapter gives a session its own memory file', async () => {
