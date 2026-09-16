@@ -91,6 +91,9 @@ runAdapter({
     const budget = firstHeader(ctx, BUDGET_HEADERS);
     if (/^(\d+|off)$/i.test(budget)) env.LEDGER_REVEAL_BUDGET = budget;
 
+    const showSensitive = firstHeader(ctx, ['x-ledger-show-sensitive']);
+    if (showSensitive) env.LEDGER_SHOW_SENSITIVE = showSensitive;
+
     ctx.log(key
       ? `本会话已提供隐私密钥，等级上限 ${ceiling}`
       : '本会话没有密钥：拒绝访问（本服务不提供匿名访问）');
