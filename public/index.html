@@ -650,6 +650,11 @@
           fetchServers();
           initSSE();
           setTimeout(() => lucide.createIcons(), 100);
+          setInterval(() => {
+            servers.value.forEach(s => {
+              if (s.status === 'running' && typeof s.uptime === 'number') s.uptime++;
+            });
+          }, 1000);
         });
 
         watch(filteredServers, () => {
