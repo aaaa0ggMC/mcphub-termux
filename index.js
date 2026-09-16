@@ -872,6 +872,18 @@ class HubManager extends EventEmitter {
     if (!srv) throw new Error(`Server ${serverId} not found`);
 
     let sess = this.persistentSessions.get(serverId);
+    // An adapter binds credentials when its process starts, and the hub feeds every later
+    // request the session's snapshot underneath the request's own headers. Reusing a live
+    // session for a caller with other (or no) credentials would either fail that caller or,
+    // worse, serve it under the identity of whoever opened the session. So a changed set of
+    // credentials reopens the process instead of inheriting them.
+    const alive = Boolean(sess && sess.process && sess.process.exitCode === null);
+    if (alive && credentialFingerprint(sess.headers) !== credentialFingerprint(headers)) {
+      this.addLog(serverId, '[Hub] Shared session reopened: caller credentials differ from the ones it was opened with', 'system');
+      sess.destroy();
+      this.persistentSessions.delete(serverId);
+      sess = null;
+    }
     if (!sess || !sess.process || sess.process.exitCode !== null) {
       sess = new StdioSession(serverId, srv, { headers });
       this.attachSessionLogging(serverId, sess);
@@ -1583,6 +1595,21 @@ function redactEnv(env) {
     masked[key] = SECRET_ENV_PATTERN.test(key) ? '***' : value;
   }
   return masked;
+}
+
+// Header names that carry credentials. A shared ("persistent") session is opened by one request
+// and then serves others, so it may only be reused while the caller brings the same credentials.
+const CREDENTIAL_HEADER_PATTERN = /(^|[-_])(authorization|cookie|token|key|secret|password|credential)([-_]|$)/i;
+
+// Fingerprint of the credential-bearing headers only. Cosmetic headers (user-agent, accept,
+// content-length) differ between requests and must not force the shared process to reopen.
+function credentialFingerprint(headers) {
+  if (!headers || typeof headers !== 'object') return '';
+  return Object.entries(headers)
+    .filter(([name]) => CREDENTIAL_HEADER_PATTERN.test(name))
+    .map(([name, value]) => `${name.toLowerCase()}=${String(value)}`)
+    .sort()
+    .join('\n');
 }
 
 // Adapter helpers -----------------------------------------------------------
