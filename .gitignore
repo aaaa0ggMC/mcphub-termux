@@ -1,0 +1,8 @@
+node_modules/
+hub.log
+hub.pid
+.patchtest
+
+# Local runtime state: the hub rewrites this file whenever a server is added, edited or
+# toggled, and it holds machine-specific paths. Copy servers.example.json instead.
+servers.json

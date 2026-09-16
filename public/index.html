@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07080c">
+<title>MCP Hub</title>
+<script>
+  // Resolve the theme before first paint so the page never flashes the wrong one.
+  (function () {
+    var stored = null;
+    try { stored = localStorage.getItem('mcp-hub-theme'); } catch (e) {}
+    var system = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    var theme = stored === 'light' || stored === 'dark' ? stored : system;
+    document.documentElement.setAttribute('data-theme', theme);
+    document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'light' ? '#f6f7fb' : '#07080c');
+  })();
+</script>
+<style>
+  /* ── Tokens ─────────────────────────────────────────────── */
+  :root,
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #07080c;
+    --bg-soft: #0b0d13;
+    --surface: #0f1219;
+    --surface-2: #141922;
+    --line: rgba(255, 255, 255, 0.08);
+    --line-2: rgba(255, 255, 255, 0.16);
+    --text: #edf0f6;
+    --muted: #98a2b3;
+    --faint: #6b7688;
+    --accent: #7c5cff;
+    --accent-ink: #ffffff;
+    --accent-soft: rgba(124, 92, 255, 0.16);
+    --second: #22d3ee;
+    --ok: #34d399;
+    --ok-soft: rgba(52, 211, 153, 0.14);
+    --warn: #fbbf24;
+    --warn-soft: rgba(251, 191, 36, 0.14);
+    --err: #fb7185;
+    --err-soft: rgba(251, 113, 133, 0.14);
+    --parked: #8b95a5;
+    --parked-soft: rgba(148, 163, 184, 0.12);
+    --shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --code-bg: #05060a;
+  }
+
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #f6f7fb;
+    --bg-soft: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f1f3f9;
+    --line: rgba(16, 24, 40, 0.09);
+    --line-2: rgba(16, 24, 40, 0.18);
+    --text: #0e1524;
+    --muted: #5b6675;
+    --faint: #8a94a4;
+    --accent: #5b3df5;
+    --accent-ink: #ffffff;
+    --accent-soft: rgba(91, 61, 245, 0.1);
+    --second: #0891b2;
+    --ok: #059669;
+    --ok-soft: rgba(5, 150, 105, 0.1);
+    --warn: #b45309;
+    --warn-soft: rgba(180, 83, 9, 0.1);
+    --err: #e11d48;
+    --err-soft: rgba(225, 29, 72, 0.09);
+    --parked: #64748b;
+    --parked-soft: rgba(100, 116, 139, 0.1);
+    --shadow: 0 14px 32px rgba(16, 24, 40, 0.1);
+    --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.07);
+    --code-bg: #0b0f18;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+
+  body {
+    min-height: 100vh;
+    min-height: 100dvh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Noto Sans SC", system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body.locked { overflow: hidden; }
+  .sprite { display: none; }
+  .shell { width: 100%; max-width: 780px; margin: 0 auto; }
+  .mono, code, pre { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  svg.i { width: 18px; height: 18px; flex: none; display: block; }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+  /* ── Header ─────────────────────────────────────────────── */
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--bg);
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: saturate(140%) blur(16px);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .topbar::after {
+    content: ""; display: block; height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--second) 55%, transparent);
+    opacity: 0.9;
+  }
+
+  .topbar-inner { padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px; }
+
+  .brand-row { display: flex; align-items: center; gap: 11px; }
+
+  .brand-mark {
+    width: 36px; height: 36px; flex: none;
+    display: grid; place-items: center;
+    border-radius: 11px;
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    color: var(--accent);
+  }
+
+  .brand-mark svg.i { width: 20px; height: 20px; }
+
+  .brand-text { flex: 1; min-width: 0; }
+  h1 { margin: 0; font-size: 16px; font-weight: 640; letter-spacing: -0.01em; }
+
+  .brand-sub {
+    display: flex; align-items: center; gap: 7px;
+    margin-top: 1px; font-size: 12px; color: var(--muted);
+  }
+
+  .live { display: inline-flex; align-items: center; gap: 5px; color: var(--faint); }
+  .live::before {
+    content: ""; width: 5px; height: 5px; border-radius: 50%;
+    background: currentColor; transition: background 0.2s ease;
+  }
+  .live.on { color: var(--ok); }
+  .live.on::before { box-shadow: 0 0 0 3px var(--ok-soft); }
+  .live.off { color: var(--err); }
+
+  .metrics {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    margin: 12px 0 0;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+    overflow: hidden;
+  }
+
+  .metric { padding: 10px 12px; border-right: 1px solid var(--line); }
+  .metric:last-child { border-right: 0; }
+
+  .metric-label {
+    display: block;
+    font-size: 10.5px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  .metric-value {
+    display: block; margin-top: 2px;
+    font-size: 20px; font-weight: 620; letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .controls { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+
+  .field-search {
+    display: flex; align-items: center; gap: 9px;
+    height: 42px; padding: 0 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    color: var(--faint);
+  }
+
+  .field-search:focus-within { border-color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+  .field-search input {
+    flex: 1; min-width: 0;
+    background: none; border: 0; outline: none;
+    font-size: 16px; color: var(--text);
+  }
+  .field-search input::placeholder { color: var(--faint); }
+
+  .control-row { display: flex; align-items: center; gap: 8px; }
+
+  .segmented {
+    display: flex; flex: 1; min-width: 0; gap: 2px;
+    padding: 3px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 11px;
+  }
+
+  .seg {
+    flex: 1; min-width: 0;
+    padding: 9px 4px;
+    border: 0; border-radius: 8px;
+    background: none; color: var(--muted);
+    font-size: 12.5px; font-weight: 600;
+    white-space: nowrap; cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .seg.is-active { background: var(--surface-2); color: var(--text); }
+
+  /* ── Buttons ────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    min-height: 40px; padding: 0 14px;
+    border-radius: 11px;
+    border: 1px solid var(--line-2);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 13.5px; font-weight: 600;
+    text-decoration: none; white-space: nowrap;
+    cursor: pointer; touch-action: manipulation;
+    transition: transform 0.1s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .btn:hover:not(:disabled) { border-color: var(--line-2); border-color: color-mix(in srgb, var(--text) 28%, transparent); }
+  .btn:active:not(:disabled) { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-sm { min-height: 36px; padding: 0 12px; font-size: 13px; }
+
+  .btn-primary {
+    background: var(--accent);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 92%, white), var(--accent));
+    border-color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 70%, black);
+    color: var(--accent-ink);
+    box-shadow: none;
+    box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 32%, transparent);
+  }
+
+  .btn-quiet { background: none; border-color: var(--line); color: var(--muted); }
+  .btn-ok { background: var(--ok-soft); border-color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); color: var(--ok); }
+  .btn-err { background: var(--err-soft); border-color: var(--err); border-color: color-mix(in srgb, var(--err) 40%, transparent); color: var(--err); }
+
+  .icon-btn {
+    width: 40px; height: 40px; flex: none;
+    display: grid; place-items: center;
+    border-radius: 11px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--muted);
+    cursor: pointer; touch-action: manipulation;
+    transition: color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+  }
+
+  .icon-btn:hover { color: var(--text); border-color: var(--line-2); }
+  .icon-btn:active { transform: scale(0.95); }
+  .icon-btn.danger:hover { color: var(--err); border-color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, transparent); }
+
+  /* ── Cards ──────────────────────────────────────────────── */
+  main { padding: 14px 16px calc(28px + env(safe-area-inset-bottom, 0px)); }
+  .list { display: flex; flex-direction: column; gap: 10px; }
+
+  .card {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: ""; position: absolute; inset: 0 auto 0 0; width: 3px;
+    background: var(--parked);
+  }
+
+  .card.status-running::before { background: var(--ok); }
+  .card.status-starting::before { background: var(--warn); }
+  .card.status-error::before { background: var(--err); }
+  .card.status-disabled::before { background: var(--parked); background: color-mix(in srgb, var(--parked) 55%, transparent); }
+
+  .card-body { padding: 13px 14px 12px 17px; }
+
+  .card-head { display: flex; align-items: flex-start; gap: 11px; }
+
+  .mono-tile {
+    width: 40px; height: 40px; flex: none;
+    display: grid; place-items: center;
+    border-radius: 12px;
+    font-size: 14px; font-weight: 700; letter-spacing: 0.02em;
+    background: hsl(var(--h) 62% 20%);
+    color: hsl(var(--h) 88% 76%);
+    border: 1px solid hsl(var(--h) 60% 40% / 0.5);
+  }
+
+  :root[data-theme="light"] .mono-tile {
+    background: hsl(var(--h) 78% 95%);
+    color: hsl(var(--h) 62% 34%);
+    border-color: hsl(var(--h) 60% 82%);
+  }
+
+  .card-info { flex: 1; min-width: 0; }
+
+  .card-title { display: flex; align-items: center; gap: 8px; }
+
+  .card-title h2 {
+    margin: 0; font-size: 15px; font-weight: 640; letter-spacing: -0.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .state {
+    display: inline-flex; align-items: center; gap: 5px; flex: none;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px; font-weight: 650; letter-spacing: 0.02em;
+    background: var(--parked-soft); color: var(--parked);
+  }
+
+  .state::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+  .state.running { background: var(--ok-soft); color: var(--ok); }
+  .state.starting { background: var(--warn-soft); color: var(--warn); }
+  .state.error { background: var(--err-soft); color: var(--err); }
+
+  .card-desc {
+    margin: 3px 0 0;
+    font-size: 12.5px; color: var(--muted);
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+
+  .facts {
+    display: flex; flex-wrap: wrap; gap: 4px 18px;
+    margin: 11px 0 0; padding: 0;
+  }
+
+  .facts div { display: flex; align-items: baseline; gap: 6px; }
+  .facts dt { font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--faint); }
+  .facts dd { margin: 0; font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+  .ep { display: flex; align-items: center; gap: 10px; padding: 4px 0; border-top: 1px dashed var(--line); }
+  .ep-label { flex: none; width: 82px; font-size: 11px; color: var(--faint); }
+  .ep-url {
+    flex: 1; min-width: 0;
+    font-size: 11.5px; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .ep .icon-btn { width: 34px; height: 34px; border: 0; background: none; color: var(--accent); }
+
+  .card-foot { display: flex; align-items: center; gap: 8px; padding: 12px 14px 13px 17px; border-top: 1px solid var(--line); }
+  .card-foot .btn { min-width: 80px; }
+  .spacer { flex: 1; }
+
+  .kind {
+    flex: none;
+    padding: 2px 7px; border-radius: 6px;
+    border: 1px solid var(--line-2);
+    font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  .health { display: inline-flex; align-items: center; gap: 5px; }
+  .health::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
+  .health.up::before { background: var(--ok); }
+  .health.warn::before { background: var(--warn); }
+  .health.down::before { background: var(--err); }
+
+  .quota { padding: 9px 0; border-top: 1px dashed var(--line); }
+  .quota:first-of-type { border-top: 0; }
+  .quota-head { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; }
+  .quota-head b { font-weight: 640; }
+  .quota-head span { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .bar { height: 6px; margin-top: 7px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+  .bar > span { display: block; height: 100%; border-radius: 3px; background: var(--ok); }
+  .bar.warn > span { background: var(--warn); }
+  .bar.down > span { background: var(--err); }
+  .quota-reset { margin-top: 6px; font-size: 11.5px; color: var(--faint); }
+
+  .sheet-label {
+    margin: 18px 0 8px; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.07em; text-transform: uppercase; color: var(--faint);
+  }
+  .sheet-label:first-child { margin-top: 0; }
+
+  .rows { border-top: 1px solid var(--line); }
+  .row-act {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    min-height: 48px; padding: 0 2px;
+    border: 0; border-bottom: 1px solid var(--line);
+    background: none; color: var(--text);
+    font-size: 14px; font-family: inherit; text-align: left;
+    cursor: pointer;
+  }
+  .row-act:active { opacity: 0.65; }
+  .row-act svg.i { width: 18px; height: 18px; color: var(--faint); }
+  .row-act .row-hint { margin-left: auto; font-size: 12px; color: var(--faint); }
+  .row-act.danger { color: var(--err); }
+  .row-act.danger svg.i { color: var(--err); }
+
+  /* ── Empty, footer ──────────────────────────────────────── */
+  .empty {
+    margin-top: 22px; padding: 34px 22px;
+    text-align: center;
+    background: var(--surface);
+    border: 1px dashed var(--line-2);
+    border-radius: 16px;
+  }
+
+  .empty svg.i { width: 30px; height: 30px; margin: 0 auto 12px; color: var(--faint); }
+  .empty p { margin: 0; font-size: 13px; color: var(--muted); }
+
+  .foot { margin: 20px 2px 0; font-size: 11.5px; color: var(--faint); text-align: center; line-height: 1.7; }
+  .foot code { color: var(--muted); }
+
+  /* ── Modals ─────────────────────────────────────────────── */
+  .modal {
+    position: fixed; inset: 0; z-index: 40;
+    display: flex; align-items: flex-end; justify-content: center;
+    background: rgba(5, 6, 10, 0.62);
+    background: color-mix(in srgb, #05060a 62%, transparent);
+    opacity: 0; visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+  }
+
+  .modal.open { opacity: 1; visibility: visible; }
+
+  .sheet {
+    position: relative;
+    width: 100%; max-width: 640px;
+    max-height: 92vh;
+    max-height: 92dvh;
+    display: flex; flex-direction: column;
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-bottom: 0;
+    border-radius: 20px 20px 0 0;
+    box-shadow: var(--shadow);
+    padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px));
+    transform: translateY(12px);
+    transition: transform 0.22s ease;
+  }
+
+  .modal.open .sheet { transform: translateY(0); }
+
+  .sheet-grab {
+    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    width: 34px; height: 4px; border-radius: 4px; background: var(--line-2);
+  }
+
+  .sheet-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 18px 16px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .sheet-title { flex: 1; min-width: 0; font-size: 15px; font-weight: 640; }
+  .sheet-sub { font-size: 11.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sheet-body { padding: 14px 16px; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .sheet-form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+
+  .sheet-foot {
+    display: flex; gap: 8px;
+    padding: 10px 16px 2px;
+    border-top: 1px solid var(--line);
+  }
+
+  .sheet-foot .btn { flex: 1; }
+
+  /* Log console */
+  .console {
+    margin: 0; padding: 12px;
+    min-height: 44vh; max-height: 56vh;
+    overflow-y: auto;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11.5px; line-height: 1.65;
+    color: #c9d3e0;
+    white-space: pre-wrap; word-break: break-word;
+  }
+
+  .log-time { color: #55627a; }
+  .log-stderr { color: #fda4af; }
+  .log-system { color: #7dd3fc; }
+  .log-empty { color: #6b7688; }
+
+  pre.code {
+    margin: 0; padding: 14px;
+    overflow-x: auto;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    font-size: 12px; line-height: 1.6; color: #c9d3e0;
+  }
+
+  .hint { margin-top: 12px; font-size: 12px; color: var(--muted); line-height: 1.8; }
+  .hint code { color: var(--text); }
+
+  /* Forms */
+  .field { margin-bottom: 12px; }
+  .field > label { display: block; margin-bottom: 6px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--faint); }
+
+  .input {
+    width: 100%; height: 46px; padding: 0 12px;
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--line); border-radius: 11px;
+    outline: none; font-size: 16px;
+  }
+
+  .input:focus { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+  .input:disabled { opacity: 0.55; }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; min-width: 0; }
+
+  .switch-row { display: flex; align-items: center; gap: 12px; padding: 13px 0; border-top: 1px solid var(--line); }
+  .switch-text { flex: 1; font-size: 13.5px; font-weight: 600; }
+  .switch-text small { display: block; margin-top: 1px; font-size: 11.5px; font-weight: 400; color: var(--faint); }
+  .switch { position: relative; flex: none; width: 46px; height: 27px; cursor: pointer; }
+  .switch input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+
+  .track {
+    position: absolute; inset: 0;
+    border-radius: 999px;
+    background: var(--surface-2);
+    border: 1px solid var(--line-2);
+    transition: background 0.18s ease, border-color 0.18s ease;
+  }
+
+  .track::after {
+    content: ""; position: absolute; top: 3px; left: 3px;
+    width: 19px; height: 19px; border-radius: 50%;
+    background: var(--muted);
+    transition: transform 0.18s ease, background 0.18s ease;
+  }
+
+  .switch input:checked + .track { background: var(--accent); border-color: var(--accent); }
+  .switch input:checked + .track::after { transform: translateX(19px); background: #fff; }
+  .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Toast */
+  .toast {
+    position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+    transform: translate(-50%, 12px);
+    z-index: 60;
+    max-width: min(92vw, 480px);
+    padding: 11px 15px;
+    background: var(--surface-2);
+    border: 1px solid var(--line-2);
+    border-left: 3px solid var(--accent);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    font-size: 13px;
+    opacity: 0; visibility: hidden;
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
+  }
+
+  .toast.show { opacity: 1; visibility: visible; transform: translate(-50%, 0); }
+
+  @media (min-width: 720px) {
+    .modal { align-items: center; }
+    .sheet { border-radius: 18px; border-bottom: 1px solid var(--line); max-height: 86vh; max-height: 86dvh; padding-bottom: 4px; }
+    .sheet-grab { display: none; }
+    .topbar-inner { padding: 14px 16px 12px; }
+    .metrics { max-width: 420px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-hub" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <circle cx="12" cy="12" r="2.1"></circle>
+    <circle cx="5" cy="6" r="1.7"></circle>
+    <circle cx="19" cy="6" r="1.7"></circle>
+    <circle cx="12" cy="20" r="1.7"></circle>
+    <path d="M12 9.9V7.7M6.5 7.1l3.1 2.5M17.5 7.1l-3.1 2.5M12 14.1v3.6"></path>
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    <path d="M12 5.5v13M5.5 12h13"></path>
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path>
+  </symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 11.5a8 8 0 1 1-2.5-5.8"></path><path d="M20 4.5v5h-5"></path>
+  </symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8.5 5.6v12.8l10.5-6.4z" fill="currentColor"></path></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2.4" fill="currentColor"></rect></symbol>
+  <symbol id="i-reload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4.5 12a7.5 7.5 0 0 1 12.8-5.3"></path><path d="M20 4.6v4.6h-4.6"></path>
+    <path d="M19.5 12a7.5 7.5 0 0 1-12.8 5.3"></path><path d="M4 19.4v-4.6h4.6"></path>
+  </symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3.5" y="4.5" width="17" height="15" rx="2.6"></rect>
+    <path d="M7.5 10l2.4 2-2.4 2M13 14h3.6"></path>
+  </symbol>
+  <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10.5 13.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1 1"></path>
+    <path d="M13.5 10.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1-1"></path>
+  </symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4.5 19.5h4L20 8l-3.9-3.9L4.5 15.5z"></path><path d="M14.6 5.6l3.9 3.9"></path>
+  </symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4.5 7h15M9.5 7V4.8h5V7M6.5 7l.9 12.2h9.2L17.5 7"></path>
+  </symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="9" y="9" width="10.5" height="10.5" rx="2.4"></rect>
+    <path d="M15 5.5H6.9A2.4 2.4 0 0 0 4.5 7.9V16"></path>
+  </symbol>
+  <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    <path d="M6.5 6.5l11 11M17.5 6.5l-11 11"></path>
+  </symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <circle cx="12" cy="12" r="4"></circle>
+    <path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6L18 18M18 6l-1.4 1.4M7.4 16.6L6 18"></path>
+  </symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 14.2A8.2 8.2 0 0 1 9.8 4a8.4 8.4 0 1 0 10.2 10.2z"></path>
+  </symbol>
+  <symbol id="i-empty" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3.5" y="6.5" width="17" height="11" rx="2.6"></rect><path d="M3.5 11.5h17M8 15h3"></path>
+  </symbol>
+</svg>
+
+<header class="topbar">
+  <div class="shell topbar-inner">
+    <div class="brand-row">
+      <div class="brand-mark"><svg class="i"><use href="#i-hub"></use></svg></div>
+      <div class="brand-text">
+        <h1>MCP Hub</h1>
+        <div class="brand-sub">
+          <span class="live" id="liveState">连接中</span>
+          <span id="brandMeta"></span>
+        </div>
+      </div>
+      <button class="icon-btn" id="themeToggle" aria-label="切换深浅色" title="切换深浅色">
+        <svg class="i" id="themeIcon"><use href="#i-moon" id="themeIconUse"></use></svg>
+      </button>
+      <button class="btn btn-primary btn-sm" onclick="openAddModal()">
+        <svg class="i"><use href="#i-plus"></use></svg>添加
+      </button>
+    </div>
+
+    <div class="metrics">
+      <div class="metric"><span class="metric-label">运行中</span><span class="metric-value" id="statRunning">0</span></div>
+      <div class="metric"><span class="metric-label">服务</span><span class="metric-value" id="statTotal">0</span></div>
+      <div class="metric"><span class="metric-label">会话</span><span class="metric-value" id="statSessions">0</span></div>
+    </div>
+
+    <div class="controls">
+      <label class="field-search">
+        <svg class="i"><use href="#i-search"></use></svg>
+        <input id="searchInput" type="search" placeholder="搜索服务" oninput="applyFilter()">
+      </label>
+      <div class="control-row">
+        <div class="segmented" id="filterBar">
+          <button class="seg is-active" data-filter="all" onclick="setFilter('all')">全部</button>
+          <button class="seg" data-filter="running" onclick="setFilter('running')">运行中</button>
+          <button class="seg" data-filter="stopped" onclick="setFilter('stopped')">未运行</button>
+        </div>
+        <button class="icon-btn" onclick="fetchServers()" aria-label="刷新" title="刷新"><svg class="i"><use href="#i-refresh"></use></svg></button>
+      </div>
+      <div class="control-row">
+        <button class="btn btn-quiet btn-sm" style="flex:1" onclick="startAll()">全部启动</button>
+        <button class="btn btn-quiet btn-sm" style="flex:1" onclick="stopAll()">全部停止</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="shell">
+  <div class="list" id="serverList"></div>
+  <div class="empty" id="emptyState" hidden>
+    <svg class="i"><use href="#i-empty"></use></svg>
+    <p id="emptyText">还没有配置服务</p>
+  </div>
+  <p class="foot">
+    <code id="footOrigin"></code> · 协议 2025-11-25 / 2025-06-18 / 2025-03-26
+  </p>
+</main>
+
+<div class="modal" id="logModal" onclick="closeOnOverlay(event, 'logModal')" role="dialog" aria-modal="true">
+  <div class="sheet">
+    <div class="sheet-grab"></div>
+    <div class="sheet-head">
+      <div style="flex:1; min-width:0">
+        <div class="sheet-title" id="logServerTitle">实时日志</div>
+        <div class="sheet-sub mono" id="logServerSub"></div>
+      </div>
+      <button class="btn btn-quiet btn-sm" onclick="clearLogs()">清空</button>
+      <button class="icon-btn" onclick="closeModal('logModal')" aria-label="关闭"><svg class="i"><use href="#i-close"></use></svg></button>
+    </div>
+    <div class="sheet-body">
+      <div class="console" id="logBox"><div class="log-line log-empty">连接日志流…</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="detailModal" onclick="closeOnOverlay(event, 'detailModal')" role="dialog" aria-modal="true">
+  <div class="sheet">
+    <div class="sheet-grab"></div>
+    <div class="sheet-head">
+      <div style="flex:1; min-width:0">
+        <div class="sheet-title" id="detailTitle">服务详情</div>
+        <div class="sheet-sub" id="detailSub"></div>
+      </div>
+      <button class="icon-btn" onclick="closeModal('detailModal')" aria-label="关闭"><svg class="i"><use href="#i-close"></use></svg></button>
+    </div>
+    <div class="sheet-body" id="detailBody"></div>
+  </div>
+</div>
+
+<div class="modal" id="addModal" onclick="closeOnOverlay(event, 'addModal')" role="dialog" aria-modal="true">
+  <div class="sheet">
+    <div class="sheet-grab"></div>
+    <div class="sheet-head">
+      <div class="sheet-title" id="addModalTitle">添加服务</div>
+      <button class="icon-btn" onclick="closeModal('addModal')" aria-label="关闭"><svg class="i"><use href="#i-close"></use></svg></button>
+    </div>
+    <form id="serverForm" class="sheet-form" onsubmit="handleSaveServer(event)">
+      <div class="sheet-body">
+        <input type="hidden" id="editId">
+        <div class="row">
+          <div class="field">
+            <label for="formId">服务标识</label>
+            <input class="input" id="formId" required placeholder="my-tool" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="field" style="flex:0 0 92px">
+            <label for="formIcon">标记</label>
+            <input class="input" id="formIcon" maxlength="2" placeholder="MT" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <div class="field">
+          <label for="formName">名称</label>
+          <input class="input" id="formName" required placeholder="My Tool" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="formDesc">说明</label>
+          <input class="input" id="formDesc" placeholder="可选，一句话描述" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="formCommand">启动命令</label>
+          <input class="input" id="formCommand" required placeholder="node" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="formArgs">参数（空格分隔）</label>
+          <input class="input" id="formArgs" placeholder="server.js --stdio" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="formCwd">工作目录</label>
+          <input class="input" id="formCwd" placeholder="可选，绝对路径" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="formKind">类型</label>
+          <select class="input" id="formKind" onchange="toggleKindFields()">
+            <option value="mcp">MCP 服务（stdio 聚合）</option>
+            <option value="service">通用服务（启动器托管）</option>
+          </select>
+        </div>
+        <div id="serviceFields" hidden>
+          <div class="row">
+            <div class="field" style="flex:0 0 116px">
+              <label for="formPort">端口</label>
+              <input class="input" id="formPort" type="number" inputmode="numeric" placeholder="6769">
+            </div>
+            <div class="field">
+              <label for="formHealthPath">健康检查路径</label>
+              <input class="input" id="formHealthPath" placeholder="/healthz" autocomplete="off" spellcheck="false">
+            </div>
+          </div>
+          <div class="field">
+            <label for="formUsagePath">额度接口（可选）</label>
+            <input class="input" id="formUsagePath" placeholder="/v1/usage" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="hint" style="margin-top:0; margin-bottom:12px">服务保持自己的端口运行；需要的话可以在 servers.json 里加 <code>"proxy": true</code>，让 hub 额外镜像到 <code>/apps/&lt;id&gt;/</code>。</div>
+        </div>
+        <div class="switch-row">
+          <div class="switch-text">
+            启用服务
+            <small>关闭后 hub 不会启动它，也不允许手动启动</small>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="formEnabled">
+            <span class="track"></span>
+          </label>
+        </div>
+        <div class="switch-row">
+          <div class="switch-text">
+            随 Hub 自动启动
+            <small>关闭后 hub 启动时留空，需要手动唤醒</small>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="formAutoStart">
+            <span class="track"></span>
+          </label>
+        </div>
+      </div>
+      <div class="sheet-foot">
+        <button type="button" class="btn btn-quiet" onclick="closeModal('addModal')">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toastMsg"></div>
+
+<script>
+  const STATE_LABEL = {
+    running: '运行中',
+    starting: '启动中',
+    error: '异常',
+    stopped: '已停止',
+    disabled: '已停用'
+  };
+
+  const HEALTH_LABEL = { up: '正常', down: '异常', unknown: '未知' };
+
+  let servers = [];
+  let activeLogSource = null;
+  let currentFilter = 'all';
+  let currentQuery = '';
+  let toastTimer = null;
+  const openPanels = new Set();
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (value) => String(value == null ? '' : value)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  /* ── Theme ────────────────────────────────────────────── */
+  function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'light' ? '#f6f7fb' : '#07080c');
+    $('themeIconUse').setAttribute('href', theme === 'light' ? '#i-sun' : '#i-moon');
+    try { localStorage.setItem('mcp-hub-theme', theme); } catch {}
+  }
+
+  $('themeToggle').addEventListener('click', () => {
+    setTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+  });
+
+  const systemTheme = window.matchMedia('(prefers-color-scheme: light)');
+  const onSystemTheme = (event) => {
+    let stored = null;
+    try { stored = localStorage.getItem('mcp-hub-theme'); } catch {}
+    if (!stored) setTheme(event.matches ? 'light' : 'dark');
+  };
+  if (typeof systemTheme.addEventListener === 'function') systemTheme.addEventListener('change', onSystemTheme);
+  else if (typeof systemTheme.addListener === 'function') systemTheme.addListener(onSystemTheme);
+
+  $('themeIconUse').setAttribute('href', document.documentElement.getAttribute('data-theme') === 'light' ? '#i-sun' : '#i-moon');
+
+  /* ── Data ─────────────────────────────────────────────── */
+  async function fetchServers() {
+    try {
+      const res = await fetch('/api/servers');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      servers = data.servers || [];
+      render();
+    } catch (error) {
+      setLive('off', '连接失败');
+      showToast(`加载服务列表失败: ${error.message}`);
+    }
+  }
+
+  function setLive(state, text) {
+    const el = $('liveState');
+    el.classList.remove('on', 'off');
+    if (state) el.classList.add(state);
+    el.innerText = text || (state === 'on' ? '实时同步' : '连接中');
+  }
+
+  function applyFilter() {
+    currentQuery = $('searchInput').value.trim().toLowerCase();
+    render();
+  }
+
+  function setFilter(next) {
+    currentFilter = next;
+    for (const seg of document.querySelectorAll('#filterBar .seg')) {
+      seg.classList.toggle('is-active', seg.dataset.filter === next);
+    }
+    render();
+  }
+
+  function visibleServers() {
+    return servers.filter((server) => {
+      if (currentFilter === 'running' && server.status !== 'running') return false;
+      if (currentFilter === 'stopped' && (server.status === 'running' || server.status === 'starting')) return false;
+      if (!currentQuery) return true;
+      return [server.id, server.name, server.description]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(currentQuery));
+    });
+  }
+
+  /* ── Render ───────────────────────────────────────────── */
+  function render() {
+    const running = servers.filter((server) => server.status === 'running').length;
+    const sessions = servers.reduce((sum, server) => sum + (server.activeHttpSessions || 0) + (server.activeClientSessions || 0), 0);
+    $('statRunning').innerText = String(running);
+    $('statTotal').innerText = String(servers.length);
+    $('statSessions').innerText = String(sessions);
+    $('footOrigin').innerText = window.location.host;
+    $('brandMeta').innerText = `${running}/${servers.length} 运行中`;
+
+    const list = $('serverList');
+    const shown = visibleServers();
+    list.innerHTML = shown.map(cardHtml).join('');
+
+    $('emptyState').hidden = shown.length > 0;
+    $('emptyText').innerText = servers.length === 0 ? '还没有配置服务' : '没有匹配的服务';
+
+    for (const panel of list.querySelectorAll('details[data-panel]')) {
+      const key = panel.dataset.panel;
+      panel.open = openPanels.has(key);
+      panel.addEventListener('toggle', () => {
+        if (panel.open) openPanels.add(key);
+        else openPanels.delete(key);
+      });
+    }
+  }
+
+  function monogram(server) {
+    const mark = String(server.icon || '').trim();
+    if (/^[A-Za-z0-9]{1,2}$/.test(mark)) return mark.toUpperCase();
+    const words = String(server.name || server.id).replace(/[^\p{L}\p{N} ]/gu, ' ').trim().split(/\s+/);
+    const initials = (words[0]?.[0] || '?') + (words[1]?.[0] || '');
+    return initials.toUpperCase();
+  }
+
+  function hueOf(id) {
+    let hue = 0;
+    for (const char of String(id)) hue = (hue * 31 + char.codePointAt(0)) % 360;
+    return hue;
+  }
+
+  function icon(name) {
+    return `<svg class="i"><use href="#i-${name}"></use></svg>`;
+  }
+
+  function isService(server) {
+    return server.kind === 'service';
+  }
+
+  // Where a client should point itself: services keep their own address, MCP entries are
+  // aggregated by the hub.
+  function endpointRows(server) {
+    const origin = window.location.origin;
+    if (isService(server)) {
+      const rows = [];
+      if (server.upstream) rows.push(['地址', server.upstream]);
+      if (server.proxyPath) rows.push(['镜像', `${origin}${server.proxyPath}`]);
+      return rows;
+    }
+    return [
+      ['HTTP', `${origin}/mcps/${server.id}/mcp`],
+      ['SSE', `${origin}/mcps/${server.id}/sse`],
+      ['健康', `${origin}/mcps/${server.id}/health`]
+    ];
+  }
+
+  // A service that exposes a usage endpoint (codex-proxy's /v1/usage) reports quota windows.
+  function usageWindows(server) {
+    const usage = server.usage;
+    if (!usage || !Array.isArray(usage.windows) || !usage.windows.length) return [];
+    return usage.windows;
+  }
+
+  function usageTone(percent) {
+    if (percent <= 10) return 'down';
+    if (percent <= 30) return 'warn';
+    return 'up';
+  }
+
+  function formatReset(value) {
+    if (!value) return '';
+    const at = new Date(value);
+    if (Number.isNaN(at.getTime())) return '';
+    const hhmm = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+    const sameDay = at.toDateString() === new Date().toDateString();
+    return sameDay ? hhmm : `${at.getMonth() + 1}/${at.getDate()} ${hhmm}`;
+  }
+
+  function accessHint(server) {
+    if (isService(server)) {
+      const lines = [];
+      if (server.upstream) lines.push(`# 服务自己的地址\n${server.upstream}`);
+      if (server.proxyPath) lines.push(`# hub 镜像（可选）\n${window.location.origin}${server.proxyPath}`);
+      if (server.upstream) lines.push(`# 健康检查\n${server.upstream}${server.healthPath || '/healthz'}`);
+      return { text: lines.join('\n\n'), hint: '服务按自己的端口跑；只有配置了 <code>"proxy": true</code> 才会有 hub 镜像地址。' };
+    }
+    const httpUrl = `${window.location.origin}/mcps/${server.id}/mcp`;
+    const sseUrl = `${window.location.origin}/mcps/${server.id}/sse`;
+    return {
+      text: JSON.stringify({ mcpServers: { [server.id]: { type: 'http', url: httpUrl } } }, null, 2),
+      hint: `Streamable HTTP: <code>${esc(httpUrl)}</code><br>旧版客户端 (HTTP+SSE): <code>${esc(sseUrl)}</code><br>支持协议: 2025-11-25 / 2025-06-18 / 2025-03-26 / 2024-11-05`
+    };
+  }
+
+  function cardHtml(server) {
+    const status = server.status || 'stopped';
+    const running = status === 'running';
+    const parked = status === 'disabled' || server.enabled === false;
+    const service = isService(server);
+
+    const facts = [];
+    if (server.pid) facts.push(`<div><dt>PID</dt><dd>${esc(server.pid)}</dd></div>`);
+    if (running) facts.push(`<div><dt>运行</dt><dd>${formatUptime(server.uptime)}</dd></div>`);
+    if (service) {
+      const state = (server.health && server.health.state) || 'unknown';
+      facts.push(`<div><dt>健康</dt><dd><span class="health ${esc(state)}">${esc(HEALTH_LABEL[state] || state)}</span></dd></div>`);
+      for (const window of usageWindows(server)) {
+        const tone = usageTone(window.remainingPercent);
+        facts.push(`<div><dt>额度 ${esc(window.shortLabel || window.label)}</dt><dd><span class="health ${tone}">剩 ${Math.round(window.remainingPercent)}%</span></dd></div>`);
+      }
+      if (server.restarts) facts.push(`<div><dt>重启</dt><dd>${server.restarts}</dd></div>`);
+    } else {
+      const sessions = (server.activeHttpSessions || 0) + (server.activeClientSessions || 0);
+      if (sessions) facts.push(`<div><dt>会话</dt><dd>${sessions}</dd></div>`);
+    }
+    if (server.autoStart === false) facts.push('<div><dt>启动</dt><dd>手动</dd></div>');
+
+    const primary = running
+      ? `<button class="btn btn-err btn-sm" data-act="stop" data-id="${esc(server.id)}">${icon('stop')}停止</button>`
+      : `<button class="btn btn-ok btn-sm" data-act="start" data-id="${esc(server.id)}"${parked ? ' disabled' : ''}>${icon('play')}启动</button>`;
+    const open = running && service && server.upstream
+      ? `<a class="btn btn-quiet btn-sm" href="${esc(server.upstream)}" target="_blank" rel="noreferrer">${icon('link')}打开</a>`
+      : '';
+
+    return `
+      <article class="card status-${esc(status)}">
+        <div class="card-body">
+          <div class="card-head" data-act="details" data-id="${esc(server.id)}">
+            <div class="mono-tile" style="--h:${hueOf(server.id)}">${esc(monogram(server))}</div>
+            <div class="card-info">
+              <div class="card-title">
+                <h2>${esc(server.name || server.id)}</h2>
+                <span class="kind">${service ? '服务' : 'MCP'}</span>
+                <span class="state ${esc(status)}">${esc(STATE_LABEL[status] || status)}</span>
+              </div>
+              <p class="card-desc">${esc(server.description || server.id)}</p>
+            </div>
+          </div>
+
+          <dl class="facts">${facts.join('')}</dl>
+        </div>
+
+        <div class="card-foot">
+          ${primary}
+          ${open}
+          <span class="spacer"></span>
+          <button class="btn btn-quiet btn-sm" data-act="details" data-id="${esc(server.id)}">详情</button>
+        </div>
+      </article>`;
+  }
+
+  // Everything that does not fit on the card lives here, so a card only carries one primary
+  // action, an optional "open" and one door to the rest.
+  function openDetails(id) {
+    const server = servers.find((entry) => entry.id === id);
+    if (!server) return;
+    const status = server.status || 'stopped';
+    const running = status === 'running';
+    $('detailTitle').innerText = server.name || server.id;
+    $('detailSub').innerText = [isService(server) ? '通用服务' : 'MCP 服务', STATE_LABEL[status] || status, server.proxyPath ? 'hub 镜像' : '']
+      .filter(Boolean).join(' · ');
+
+    const endpoints = endpointRows(server);
+    const access = accessHint(server);
+    const facts = [];
+    if (server.pid) facts.push(`<div><dt>PID</dt><dd>${esc(server.pid)}</dd></div>`);
+    if (running) facts.push(`<div><dt>运行</dt><dd>${formatUptime(server.uptime)}</dd></div>`);
+    if (isService(server)) {
+      const state = (server.health && server.health.state) || 'unknown';
+      const error = server.health && server.health.error ? ` (${server.health.error})` : '';
+      facts.push(`<div><dt>健康</dt><dd><span class="health ${esc(state)}">${esc(HEALTH_LABEL[state] || state)}</span>${esc(error)}</dd></div>`);
+      if (server.restart) facts.push(`<div><dt>重启策略</dt><dd>${esc(server.restart)}</dd></div>`);
+      if (server.restarts) facts.push(`<div><dt>重启次数</dt><dd>${server.restarts}</dd></div>`);
+    }
+    if (server.command) facts.push(`<div><dt>命令</dt><dd>${esc([server.command, ...(server.args || [])].join(' '))}</dd></div>`);
+
+    const usage = usageWindows(server);
+    const usageHtml = usage.length ? `
+      <div class="sheet-label">额度${server.usage.planType ? ` · ${esc(server.usage.planType)}` : ''}</div>
+      ${usage.map((window) => {
+        const tone = usageTone(window.remainingPercent);
+        const reset = formatReset(window.resetsAt);
+        return `
+        <div class="quota">
+          <div class="quota-head"><b>${esc(window.label)}</b><span>剩余 ${Math.round(window.remainingPercent)}% / 已用 ${Math.round(window.usedPercent)}%</span></div>
+          <div class="bar ${tone}"><span style="width:${Math.max(0, Math.min(100, window.remainingPercent))}%"></span></div>
+          ${reset ? `<div class="quota-reset">重置于 ${esc(reset)}${server.usage.stale ? ' · 数据可能已过期' : ''}</div>` : ''}
+        </div>`;
+      }).join('')}` : '';
+
+    $('detailBody').innerHTML = `
+      <dl class="facts">${facts.join('')}</dl>
+      ${usageHtml}
+      ${endpoints.length ? `
+        <div class="sheet-label">接入地址</div>
+        ${endpoints.map(([label, url]) => `
+          <div class="ep">
+            <span class="ep-label">${esc(label)}</span>
+            <span class="ep-url mono">${esc(url)}</span>
+            <button class="icon-btn" data-act="copy" data-copy="${esc(url)}" aria-label="复制地址" title="复制">${icon('copy')}</button>
+          </div>`).join('')}` : ''}
+
+      <div class="sheet-label">接入示例</div>
+      <pre class="code">${esc(access.text)}</pre>
+      <div class="hint">${access.hint}</div>
+
+      <div class="sheet-label">操作</div>
+      <div class="rows">
+        ${running ? `
+        <button class="row-act" data-act="restart" data-id="${esc(server.id)}">
+          ${icon('reload')}<span>重载</span><span class="row-hint">重新拉起进程</span>
+        </button>` : ''}
+        <button class="row-act" data-act="logs" data-id="${esc(server.id)}">
+          ${icon('terminal')}<span>实时日志</span><span class="row-hint">stdout / stderr</span>
+        </button>
+        <button class="row-act" data-act="edit" data-id="${esc(server.id)}">
+          ${icon('edit')}<span>编辑配置</span>
+        </button>
+        <button class="row-act danger" data-act="delete" data-id="${esc(server.id)}">
+          ${icon('trash')}<span>移除</span>
+        </button>
+      </div>`;
+    openModal('detailModal');
+  }
+
+  document.addEventListener('click', (event) => {
+    const trigger = event.target.closest('[data-act]');
+    if (!trigger) return;
+    const { act, id, copy } = trigger.dataset;
+    if (act === 'copy') return copyText(copy);
+    if (act === 'details') return openDetails(id);
+    // Any other action leaves the detail sheet, then runs from the card's fresh state.
+    closeModal('detailModal');
+    if (act === 'start') return startServer(id);
+    if (act === 'stop') return stopServer(id);
+    if (act === 'restart') return restartServer(id);
+    if (act === 'logs') return openLogs(id);
+    if (act === 'edit') return editServer(id);
+    if (act === 'delete') return deleteServer(id);
+  });
+
+  /* ── Actions ──────────────────────────────────────────── */
+  async function callApi(route, options) {
+    const res = await fetch(route, options);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return body;
+  }
+
+  async function startServer(id) {
+    try {
+      await callApi(`/api/servers/${id}/start`, { method: 'POST' });
+      showToast(`${id} 已启动`);
+      fetchServers();
+    } catch (error) {
+      showToast(`${id} 启动失败: ${error.message}`);
+    }
+  }
+
+  async function stopServer(id) {
+    try {
+      await callApi(`/api/servers/${id}/stop`, { method: 'POST' });
+      showToast(`${id} 已停止`);
+      fetchServers();
+    } catch (error) {
+      showToast(`${id} 停止失败: ${error.message}`);
+    }
+  }
+
+  async function restartServer(id) {
+    try {
+      await callApi(`/api/servers/${id}/restart`, { method: 'POST' });
+      showToast(`${id} 已重载`);
+      fetchServers();
+    } catch (error) {
+      showToast(`${id} 重载失败: ${error.message}`);
+    }
+  }
+
+  async function bulkAction(action, label) {
+    try {
+      const body = await callApi(`/api/servers/${action}`, { method: 'POST' });
+      const failed = (body.results || []).filter((entry) => entry.error);
+      const skipped = (body.results || []).filter((entry) => entry.skipped);
+      if (failed.length) showToast(`${label}部分失败: ${failed.map((entry) => entry.id).join(', ')}`);
+      else if (skipped.length) showToast(`${label}完成，跳过 ${skipped.length} 个已停用服务`);
+      else showToast(`${label}完成`);
+      fetchServers();
+    } catch (error) {
+      showToast(`${label}失败: ${error.message}`);
+    }
+  }
+
+  function startAll() { bulkAction('start-all', '全部启动'); }
+  function stopAll() { bulkAction('stop-all', '全部停止'); }
+
+  async function deleteServer(id) {
+    if (!confirm(`确定要移除服务 ${id} 吗？`)) return;
+    try {
+      await callApi(`/api/servers/${id}`, { method: 'DELETE' });
+      showToast(`已移除 ${id}`);
+      fetchServers();
+    } catch (error) {
+      showToast(`移除失败: ${error.message}`);
+    }
+  }
+
+  /* ── Logs ─────────────────────────────────────────────── */
+  function openLogs(id) {
+    const server = servers.find((entry) => entry.id === id);
+    $('logServerTitle').innerText = `${server ? server.name || server.id : id}`;
+    $('logServerSub').innerText = [server?.command, ...(server?.args || [])].filter(Boolean).join(' ') || 'stdio';
+    const box = $('logBox');
+    box.innerHTML = '<div class="log-line log-empty">连接日志流…</div>';
+    openModal('logModal');
+
+    if (activeLogSource) activeLogSource.close();
+    activeLogSource = new EventSource(`/api/servers/${id}/logs/stream`);
+    activeLogSource.onmessage = (event) => {
+      let data;
+      try {
+        data = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+      if (data.type === 'history') {
+        box.innerHTML = '';
+        if (!data.logs.length) box.innerHTML = '<div class="log-line log-empty">暂无日志</div>';
+        for (const entry of data.logs) appendLog(entry);
+      } else if (data.type === 'log') {
+        appendLog(data.entry);
+      }
+    };
+    activeLogSource.onerror = () => appendLog({ time: nowHms(), stream: 'system', text: '日志流已断开，正在重连' });
+  }
+
+  function appendLog(entry) {
+    const box = $('logBox');
+    const placeholder = box.querySelector('.log-empty');
+    if (placeholder) placeholder.remove();
+    const line = document.createElement('div');
+    line.className = `log-line log-${entry.stream || 'stdout'}`;
+    line.innerHTML = `<span class="log-time">[${esc(entry.time)}]</span> ${esc(entry.text)}`;
+    box.appendChild(line);
+    while (box.childElementCount > 500) box.firstElementChild.remove();
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function clearLogs() {
+    $('logBox').innerHTML = '<div class="log-line log-empty">已清空，新日志会继续追加</div>';
+  }
+
+  const nowHms = () => new Date().toTimeString().slice(0, 8);
+
+  /* ── Add / edit ───────────────────────────────────────── */
+  // Only launcher entries listen on a port of their own, so the port and health fields are
+  // hidden for stdio MCP servers.
+  function toggleKindFields() {
+    $('serviceFields').hidden = $('formKind').value !== 'service';
+  }
+
+  function openAddModal() {
+    $('serverForm').reset();
+    $('editId').value = '';
+    $('formId').disabled = false;
+    $('formEnabled').checked = true;
+    $('formAutoStart').checked = true;
+    $('formKind').value = 'mcp';
+    toggleKindFields();
+    $('addModalTitle').innerText = '添加服务';
+    openModal('addModal');
+  }
+
+  function editServer(id) {
+    const server = servers.find((entry) => entry.id === id);
+    if (!server) return;
+    $('editId').value = server.id;
+    $('formId').value = server.id;
+    $('formId').disabled = true;
+    $('formIcon').value = /^[A-Za-z0-9]{1,2}$/.test(String(server.icon || '').trim()) ? server.icon.trim() : '';
+    $('formName').value = server.name || '';
+    $('formDesc').value = server.description || '';
+    $('formCommand').value = server.command || '';
+    $('formArgs').value = (server.args || []).join(' ');
+    $('formCwd').value = server.cwd || '';
+    $('formKind').value = isService(server) ? 'service' : 'mcp';
+    $('formPort').value = server.port || '';
+    $('formHealthPath').value = server.healthPath || '';
+    $('formUsagePath').value = server.usagePath || '';
+    toggleKindFields();
+    $('formEnabled').checked = server.enabled !== false;
+    $('formAutoStart').checked = server.autoStart !== false;
+    $('addModalTitle').innerText = `编辑服务 · ${server.id}`;
+    openModal('addModal');
+  }
+
+  async function handleSaveServer(event) {
+    event.preventDefault();
+    const editId = $('editId').value;
+    const existing = servers.find((entry) => entry.id === editId);
+    const argsRaw = $('formArgs').value.trim();
+    const kind = $('formKind').value;
+    const payload = {
+      id: editId || $('formId').value.trim(),
+      icon: $('formIcon').value.trim().toUpperCase(),
+      name: $('formName').value.trim(),
+      description: $('formDesc').value.trim(),
+      command: $('formCommand').value.trim(),
+      args: argsRaw ? argsRaw.split(/\s+/) : [],
+      cwd: $('formCwd').value.trim(),
+      kind,
+      enabled: $('formEnabled').checked,
+      autoStart: $('formAutoStart').checked
+    };
+    if (kind === 'service') {
+      payload.port = parseInt($('formPort').value, 10) || 0;
+      payload.host = '127.0.0.1';
+      payload.healthPath = $('formHealthPath').value.trim() || '/healthz';
+      payload.usagePath = $('formUsagePath').value.trim();
+    }
+    // The form only knows the common fields: carrying the rest over keeps an adapter (or a
+    // proxy opt-in, or a restart policy) from being wiped out by a save in the dashboard.
+    for (const key of ['adapter', 'restart', 'proxy', 'usagePath']) {
+      if (existing && existing[key] !== undefined && existing[key] !== null && payload[key] === undefined) {
+        payload[key] = existing[key];
+      }
+    }
+
+    try {
+      const route = editId ? `/api/servers/${editId}` : '/api/servers';
+      await callApi(route, {
+        method: editId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      closeModal('addModal');
+      showToast(editId ? '服务已更新' : '服务已添加');
+      fetchServers();
+    } catch (error) {
+      showToast(`保存失败: ${error.message}`);
+    }
+  }
+
+  /* ── Modal plumbing ───────────────────────────────────── */
+  function openModal(id) {
+    $(id).classList.add('open');
+    document.body.classList.add('locked');
+  }
+
+  function closeModal(id) {
+    $(id).classList.remove('open');
+    if (id === 'logModal' && activeLogSource) {
+      activeLogSource.close();
+      activeLogSource = null;
+    }
+    if (!document.querySelector('.modal.open')) document.body.classList.remove('locked');
+  }
+
+  function closeOnOverlay(event, id) {
+    if (event.target.id === id) closeModal(id);
+  }
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    const open = document.querySelector('.modal.open');
+    if (open) closeModal(open.id);
+  });
+
+  /* ── Toast & clipboard ────────────────────────────────── */
+  function showToast(message) {
+    const el = $('toastMsg');
+    el.innerText = message;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+  }
+
+  function copyText(text) {
+    const done = () => showToast('已复制到剪贴板');
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+      return;
+    }
+    fallbackCopy(text, done);
+  }
+
+  function fallbackCopy(text, done) {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    try {
+      document.execCommand('copy');
+      done();
+    } catch {
+      showToast('复制失败，请手动选择');
+    }
+    document.body.removeChild(area);
+  }
+
+  function formatUptime(seconds) {
+    if (!seconds || seconds <= 0) return '0s';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const rest = seconds % 60;
+    if (hours) return `${hours}h ${minutes}m`;
+    if (minutes) return `${minutes}m ${rest}s`;
+    return `${rest}s`;
+  }
+
+  /* ── Live sync ────────────────────────────────────────── */
+  function initEventStream() {
+    const stream = new EventSource('/api/events');
+    stream.onopen = () => setLive('on', '实时同步');
+    stream.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'servers') {
+          servers = data.servers || [];
+          render();
+        }
+      } catch {}
+    };
+    stream.onerror = () => {
+      setLive('off', '重连中');
+      stream.close();
+      setTimeout(initEventStream, 4000);
+    };
+  }
+
+  setLive(null, '连接中');
+  fetchServers();
+  initEventStream();
+</script>
+</body>
+</html>

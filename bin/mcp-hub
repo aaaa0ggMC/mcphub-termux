@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+# Termux ships termux-exec, which rewrites /usr/bin/env to $PREFIX/bin/env, so this shebang
+# works both there and on a normal Linux/macOS checkout.
+
+# Resolve the checkout from this script instead of a fixed path, so the directory name and
+# location are free. Set MCP_HUB_DIR to point the launcher at another checkout.
+BASE_DIR="${MCP_HUB_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+PID_FILE="${BASE_DIR}/hub.pid"
+LOG_FILE="${BASE_DIR}/hub.log"
+PORT="${MCP_HUB_PORT:-8888}"
+HUB_PATTERN="node ${BASE_DIR}/index.js"
+
+is_running() {
+    if [ -f "$PID_FILE" ]; then
+        local pid
+        pid=$(cat "$PID_FILE" 2>/dev/null)
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+    fi
+    # Also check by process command if PID file is stale
+    local actual_pid
+    actual_pid=$(pgrep -f "$HUB_PATTERN" | head -n 1)
+    if [ -n "$actual_pid" ]; then
+        echo "$actual_pid" > "$PID_FILE"
+        return 0
+    fi
+    return 1
+}
+
+start_hub() {
+    if is_running; then
+        local pid
+        pid=$(cat "$PID_FILE")
+        echo "⚡ MCP Hub is already running (PID: $pid) on port $PORT"
+        echo "📱 Open in Chrome: http://127.0.0.1:$PORT"
+        return 0
+    fi
+
+    echo "🚀 Starting MCP Hub daemon on port $PORT..."
+    setsid node "${BASE_DIR}/index.js" </dev/null >> "$LOG_FILE" 2>&1 &
+    local pid=$!
+    echo "$pid" > "$PID_FILE"
+    sleep 1
+
+    if is_running; then
+        local live_pid
+        live_pid=$(cat "$PID_FILE")
+        echo "✅ MCP Hub started successfully (PID: $live_pid)!"
+        echo "📱 Web Dashboard: http://127.0.0.1:$PORT"
+        echo "💡 Run 'mcp-hub ui' to open in mobile Chrome"
+    else
+        echo "❌ Failed to start MCP Hub. Check log:"
+        tail -n 20 "$LOG_FILE"
+        rm -f "$PID_FILE"
+        return 1
+    fi
+}
+
+start_foreground() {
+    echo "🚀 Starting MCP Hub in foreground..."
+    exec node "${BASE_DIR}/index.js"
+}
+
+stop_hub() {
+    if ! is_running; then
+        echo "⚠️ MCP Hub is not running."
+        rm -f "$PID_FILE"
+        return 0
+    fi
+
+    local pid
+    pid=$(cat "$PID_FILE")
+    echo "🛑 Stopping MCP Hub (PID: $pid)..."
+    kill -TERM "$pid" 2>/dev/null || true
+    
+    # Wait up to 4s for graceful shutdown
+    for i in {1..8}; do
+        if ! kill -0 "$pid" 2>/dev/null; then
+            break
+        fi
+        sleep 0.5
+    done
+
+    if kill -0 "$pid" 2>/dev/null; then
+        kill -9 "$pid" 2>/dev/null || true
+    fi
+
+    # Cleanup any leftover node processes from this hub index.js
+    pkill -f "$HUB_PATTERN" 2>/dev/null || true
+
+    rm -f "$PID_FILE"
+    echo "✅ MCP Hub stopped."
+}
+
+status_hub() {
+    if is_running; then
+        local pid
+        pid=$(cat "$PID_FILE")
+        echo "⚡ MCP Hub Status: RUNNING (PID: $pid, Port: $PORT)"
+        echo "📱 Dashboard: http://127.0.0.1:$PORT"
+        echo ""
+        echo "📦 Managed MCP servers & launcher services:"
+        node -e "
+            fetch('http://127.0.0.1:$PORT/api/servers')
+                .then(r => r.json())
+                .then(d => {
+                    for(const s of d.servers) {
+                        const icon = s.status === 'running' ? '🟢' : (s.status === 'starting' ? '🟡' : (s.status === 'error' ? '🔴' : '⚪'));
+                        const pidInfo = s.pid ? ', PID: ' + s.pid : '';
+                        // MCP entries are aggregated on the hub port, services keep their own.
+                        const where = s.kind === 'service'
+                            ? (s.upstream || 'no address') + (s.health && s.health.state ? ' [' + s.health.state + ']' : '')
+                            : 'Streamable HTTP: /mcps/' + s.id + '/mcp';
+                        console.log('  ' + icon + ' [' + s.id + '] ' + s.name + ' - ' + s.status.toUpperCase() + ' (' + where + pidInfo + ')');
+                    }
+                })
+                .catch(() => console.log('  (Could not query live API)'));
+        " 2>/dev/null || true
+    else
+        echo "⚪ MCP Hub Status: STOPPED"
+        echo "👉 Run 'mcp-hub start' to launch"
+    fi
+}
+
+open_ui() {
+    local url="http://127.0.0.1:$PORT"
+    if ! is_running; then
+        start_hub
+    fi
+    if command -v termux-open-url >/dev/null 2>&1; then
+        termux-open-url "$url"
+    elif command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$url"
+    else
+        echo "📱 Please open this URL in your mobile Chrome: $url"
+    fi
+}
+
+view_logs() {
+    if [ -f "$LOG_FILE" ]; then
+        tail -f -n 50 "$LOG_FILE"
+    else
+        echo "No log file found."
+    fi
+}
+
+case "$1" in
+    start)
+        start_hub
+        ;;
+    stop)
+        stop_hub
+        ;;
+    restart)
+        stop_hub
+        sleep 1
+        start_hub
+        ;;
+    status)
+        status_hub
+        ;;
+    ui|open)
+        open_ui
+        ;;
+    fg|run)
+        start_foreground
+        ;;
+    logs|log)
+        view_logs
+        ;;
+    *)
+        echo "MCP Hub - MCP aggregation & local service launcher"
+        echo ""
+        echo "Usage: mcp-hub <command>"
+        echo ""
+        echo "Commands:"
+        echo "  start    - Start MCP Hub in background"
+        echo "  stop     - Stop MCP Hub & all managed servers/services"
+        echo "  restart  - Restart MCP Hub"
+        echo "  status   - View status of Hub and all managed MCP servers"
+        echo "  ui       - Open web dashboard in Chrome"
+        echo "  fg       - Run in foreground (debug mode)"
+        echo "  logs     - View Hub logs"
+        echo ""
+        echo "Web Dashboard: http://127.0.0.1:$PORT"
+        ;;
+esac

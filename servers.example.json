@@ -1,0 +1,68 @@
+[
+  {
+    "id": "bilibili",
+    "name": "Bilibili MCP",
+    "icon": "📺",
+    "description": "Bilibili API tools for videos, creators, danmaku and search",
+    "command": "node",
+    "args": ["dist/index.js"],
+    "cwd": "~/bilibili-api-node/mcp",
+    "env": {},
+    "transport": "stdio",
+    "enabled": true,
+    "adapter": "mcps/bilibili/index.ts",
+    "kind": "mcp",
+    "autoStart": true
+  },
+  {
+    "id": "kebiao",
+    "name": "Kebiao MCP",
+    "icon": "📅",
+    "description": "Personal course timetable and academic agenda manager",
+    "command": "node",
+    "args": ["src/server.js", "--stdio"],
+    "cwd": "~/kebiao",
+    "env": {
+      "KEBIAO_DIR": "~/kebiao"
+    },
+    "transport": "stdio",
+    "enabled": true,
+    "kind": "mcp",
+    "autoStart": true
+  },
+  {
+    "id": "memory",
+    "name": "Memory MCP",
+    "icon": "🧠",
+    "description": "Graph memory server for persisting context and entities",
+    "command": "mcp-server-memory",
+    "args": [],
+    "cwd": "~/memory",
+    "env": {
+      "MEMORY_FILE_PATH": "~/memory/memory.jsonl"
+    },
+    "transport": "stdio",
+    "enabled": true,
+    "adapter": "mcps/memory/index.ts",
+    "kind": "mcp",
+    "autoStart": true
+  },
+  {
+    "id": "codex-proxy",
+    "icon": "CX",
+    "name": "Codex Proxy",
+    "description": "OpenAI-compatible endpoint backed by the Codex CLI login",
+    "command": "~/codex-proxy/codex-proxy",
+    "args": ["--port", "6769"],
+    "cwd": "~/codex-proxy",
+    "kind": "service",
+    "enabled": true,
+    "autoStart": true,
+    "port": 6769,
+    "host": "127.0.0.1",
+    "healthPath": "/healthz",
+    "usagePath": "/v1/usage",
+    "restart": "on-failure",
+    "proxy": false
+  }
+]
