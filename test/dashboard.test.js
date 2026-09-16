@@ -20,6 +20,12 @@ function script() {
   return scriptBlocks().join('\n');
 }
 
+// The markup without the inline scripts: Vue templates live there, and that is where a handler
+// rename shows up as a dead button.
+function markup() {
+  return html.replace(/<script>[\s\S]*?<\/script>/g, '');
+}
+
 test('every dashboard script parses', () => {
   const blocks = scriptBlocks();
   assert.ok(blocks.length > 0, 'index.html should contain inline scripts');
@@ -59,28 +65,54 @@ test('every inline handler calls a function that exists', () => {
 
 test('every rendered action has a handler', () => {
   const js = script();
-  const rendered = new Set([...js.matchAll(/data-act="([a-z]+)"/g)].map((match) => match[1]));
-  const handled = new Set([...js.matchAll(/act === '([a-z]+)'/g)].map((match) => match[1]));
-  const dead = [...rendered].filter((act) => !handled.has(act));
+  const bound = new Set(
+    [...markup().matchAll(/@(?:click|submit)="([A-Za-z_$][\w$]*)\s*(?:\(|")/g)].map((match) => match[1])
+  );
+  const exposed = new Set(
+    [...js.matchAll(/return \{([\s\S]*?)\};/g)].flatMap((match) =>
+      [...match[1].matchAll(/[A-Za-z_$][\w$]*/g)].map((name) => name[0])
+    )
+  );
+  const dead = [...bound].filter((name) => !exposed.has(name));
   assert.deepEqual(dead, [], `actions rendered without a handler: ${dead.join(', ')}`);
-  assert.ok(rendered.size >= 6, `expected the usual server actions to be rendered, saw ${rendered.size}`);
+  for (const action of ['startServer', 'stopServer', 'restartServer', 'deleteServer', 'openLogs', 'openDetails', 'editServer']) {
+    assert.ok(bound.has(action), `the usual server actions should be rendered, ${action} is missing`);
+  }
 });
 
 test('the add/edit form exposes both server switches', () => {
   const js = script();
-  assert.match(html, /id="formEnabled"/, 'the form should have an enabled switch');
-  assert.match(html, /id="formAutoStart"/, 'the form should have an autostart switch');
-  assert.match(js, /enabled: \$\('formEnabled'\)\.checked/, 'the payload should carry enabled');
-  assert.match(js, /autoStart: \$\('formAutoStart'\)\.checked/, 'the payload should carry autoStart');
+  assert.match(markup(), /v-model="form\.enabled"/, 'the form should have an enabled switch');
+  assert.match(markup(), /v-model="form\.autoStart"/, 'the form should have an autostart switch');
+  assert.match(markup(), /form\.enabled \?/, 'the enabled switch should render its state');
+  assert.match(markup(), /form\.autoStart \?/, 'the autostart switch should render its state');
+  assert.match(js, /enabled: true, autoStart: true/, 'both switches should default to on');
+  assert.match(js, /enabled: form\.value\.enabled, autoStart: form\.value\.autoStart/, 'the payload should carry both switches');
 });
 
 test('both themes are defined and the toggle is wired', () => {
-  assert.match(html, /<html lang="zh-CN" data-theme="dark">/, 'dark should be the default theme');
-  assert.match(html, /:root\[data-theme="light"\]\s*\{/, 'a light theme token block is required');
-  assert.match(html, /id="themeToggle"/, 'the header needs a theme toggle');
-  assert.match(script(), /setTheme\(/, 'the theme toggle should call setTheme');
-  assert.match(script(), /localStorage/, 'the chosen theme should survive a reload');
-  assert.match(script(), /prefers-color-scheme/, 'the theme should follow the system by default');
+  const js = script();
+  assert.match(html, /<html lang="zh-CN" class="dark">/, 'dark should be the default theme');
+  assert.match(html, /darkMode: 'class'/, 'tailwind should switch themes on the root class');
+  assert.match(html, /\.light body\s*\{/, 'a light theme token block is required');
+  assert.match(markup(), /@click="toggleTheme"/, 'the header needs a theme toggle');
+  assert.match(js, /document\.documentElement\.className = dark \? 'dark' : 'light'/, 'the toggle should swap the root class');
+  assert.match(js, /localStorage/, 'the chosen theme should survive a reload');
+  assert.match(js, /prefers-color-scheme/, 'the theme should follow the system by default');
+});
+
+test('the dashboard is served entirely by the hub', () => {
+  // The phone is often offline, so every asset the page pulls in has to live in public/vendor.
+  const external = [...html.matchAll(/(?:src|href)="(?:https?:)?\/\/([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(external, [], `external assets are not allowed: ${external.join(', ')}`);
+
+  const vendored = [...html.matchAll(/(?:src|href)="\/vendor\/([^"]+)"/g)].map((match) => match[1]);
+  assert.ok(vendored.length >= 3, `the dashboard should use the vendored assets, saw ${vendored.length}`);
+  for (const name of vendored) {
+    const file = path.join(here, '..', 'public', 'vendor', name);
+    assert.ok(fs.existsSync(file), `/vendor/${name} is referenced but public/vendor/${name} is missing`);
+    assert.ok(fs.statSync(file).size > 1024, `public/vendor/${name} looks like a placeholder`);
+  }
 });
 
 test('the UI chrome uses no emoji', () => {

@@ -4,9 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>MCP Hub</title>
-  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Vendored into public/vendor so the dashboard works without internet access. -->
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script src="/vendor/tailwind.js"></script>
+  <script src="/vendor/lucide.min.js"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -64,7 +65,7 @@
       </div>
       <div class="flex items-center gap-3">
         <button @click="toggleTheme" class="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-xl transition-colors border border-transparent hover:border-slate-600">
-          <i :data-lucide="isDark ? 'sun' : 'moon'" class="w-5 h-5"></i>
+          <i :key="isDark ? 'sun' : 'moon'" :data-lucide="isDark ? 'sun' : 'moon'" class="w-5 h-5"></i>
         </button>
         <button @click="openAddModal" class="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl transition-colors shadow-lg shadow-blue-500/20">
           <i data-lucide="plus" class="w-4 h-4"></i> 添加服务
@@ -536,7 +537,7 @@
 
           try {
             const route = isEdit ? `/api/servers/${payload.id}` : '/api/servers';
-            await apiCall(route, { method: isEdit ? 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            await apiCall(route, { method: isEdit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             modals.value.form.show = false;
             showToast(isEdit ? '服务已更新' : '服务已添加');
             fetchServers();
@@ -630,15 +631,22 @@
            }
         };
 
+        const applyTheme = (dark) => {
+          isDark.value = dark;
+          document.documentElement.className = dark ? 'dark' : 'light';
+          nextTick(() => lucide.createIcons());
+        };
+
+        // A theme the user picked is remembered; without one the dashboard follows the system.
         const toggleTheme = () => {
-          isDark.value = !isDark.value;
-          document.documentElement.className = isDark.value ? 'dark' : 'light';
+          applyTheme(!isDark.value);
           localStorage.setItem('mcp-hub-theme', isDark.value ? 'dark' : 'light');
         };
 
         onMounted(() => {
           const stored = localStorage.getItem('mcp-hub-theme');
-          if(stored === 'light') toggleTheme(); 
+          if(stored) applyTheme(stored !== 'light');
+          else applyTheme(!window.matchMedia('(prefers-color-scheme: light)').matches);
           fetchServers();
           initSSE();
           setTimeout(() => lucide.createIcons(), 100);

@@ -31,6 +31,15 @@ bin/mcp-hub stop
 
 `bin/mcp-hub` 用 `#!/usr/bin/env bash`，在电脑上直接可用；Termux 默认装了 `termux-exec`，会把 `/usr/bin/env` 重写到 `$PREFIX/bin/env`，所以同一个文件在手机上也能直接执行。
 
+想在任何目录里直接敲 `mcp-hub`，把启动脚本链接进 `PATH` 即可（脚本会顺着软链接找到仓库本身，
+不需要软链接指向真实路径）：
+
+```bash
+ln -sf "$PWD/bin/mcp-hub" "$PREFIX/bin/mcp-hub"
+```
+
+用 `MCP_HUB_DIR=/path/to/checkout mcp-hub start` 可以让一份启动脚本指向另一个检出。
+
 ## 端点
 
 | 端点 | 说明 |
@@ -45,6 +54,27 @@ bin/mcp-hub stop
 | `/api/*` | 控制台 REST API（服务器增删改、`/api/servers/start-all` 与 `stop-all` 批量启停、`/api/servers/<id>/health` 立即探活、`/api/servers/<id>/usage` 立即读一次额度、日志、SSE 事件流） |
 
 同一个 `POST /mcps/<id>`（不带 `/mcp`）仍然可用，兼容旧配置。
+
+## 移动端控制台
+
+`GET /` 是一个单文件的 Vue 控制台，**所有前端资源都在仓库里**，断网也能正常打开：
+
+| 文件 | 版本 | 说明 |
+| --- | --- | --- |
+| `public/vendor/vue.global.prod.js` | 3.5.42 | Vue 3 运行时（MIT） |
+| `public/vendor/tailwind.js` | 3.4.17 | Tailwind Play CDN 构建，在浏览器里即时编译，动态 class 也能生效 |
+| `public/vendor/lucide.min.js` | 1.46.0 | lucide 图标 UMD 包（ISC） |
+
+升级时覆盖 `public/vendor/` 下的文件即可，页面按 `/vendor/<name>` 引用：
+
+```bash
+curl -L -o public/vendor/vue.global.prod.js https://unpkg.com/vue@3/dist/vue.global.prod.js
+curl -L -o public/vendor/tailwind.js https://cdn.tailwindcss.com/3.4.17
+curl -L -o public/vendor/lucide.min.js https://unpkg.com/lucide@latest/dist/umd/lucide.min.js
+```
+
+`test/dashboard.test.js` 会拒绝页面里出现任何外部 `http(s)` 资源、以及指向不存在的 `/vendor/*`
+的引用，所以别再往 `<head>` 里贴 CDN 链接（手机上那多半是白屏）。
 
 ## Streamable HTTP 行为
 
@@ -310,6 +340,8 @@ npm test          # node --test，无需第三方依赖
 `test/resume.test.js` 验证会话过期 / 后端进程崩溃后的自动续会话与握手重放，
 `test/services.test.js` 用 `fixtures/fake-service.js`（最小 HTTP 服务）验证启动器的托管、探活、
 重启策略、`/apps/<id>/` 镜像转发与 `usagePath` 额度轮询（fixture 自带一个 `/v1/usage`）。
+`test/dashboard.test.js` 对控制台做静态检查：内联脚本能否解析、模板里每个 `@click` 是否都有对应
+handler、主题开关、表单里的两个开关，以及资源是否全部本地化。
 
 ## 已知限制
 

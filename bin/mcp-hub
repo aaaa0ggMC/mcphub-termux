@@ -2,9 +2,25 @@
 # Termux ships termux-exec, which rewrites /usr/bin/env to $PREFIX/bin/env, so this shebang
 # works both there and on a normal Linux/macOS checkout.
 
-# Resolve the checkout from this script instead of a fixed path, so the directory name and
-# location are free. Set MCP_HUB_DIR to point the launcher at another checkout.
-BASE_DIR="${MCP_HUB_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+# Resolve the checkout from this script instead of using a fixed path, so the directory name and
+# location are free. Symlinks are followed too: installed as `$PREFIX/bin/mcp-hub`, this script
+# has to look at the checkout it points to, not at the directory holding the link.
+# Set MCP_HUB_DIR to point the launcher at another checkout.
+script_path() {
+    local source="${BASH_SOURCE[0]}" dir
+    while [ -L "$source" ]; do
+        dir=$(cd -P "$(dirname "$source")" && pwd)
+        source=$(readlink "$source")
+        case "$source" in
+            /*) ;;
+            *) source="${dir}/${source}" ;;
+        esac
+    done
+    cd -P "$(dirname "$source")" && pwd
+}
+
+SCRIPT_DIR="$(script_path)"
+BASE_DIR="${MCP_HUB_DIR:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 PID_FILE="${BASE_DIR}/hub.pid"
 LOG_FILE="${BASE_DIR}/hub.log"
 PORT="${MCP_HUB_PORT:-8888}"
